@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -88,3 +89,29 @@ def load_deletion_request(case_id: str, *, sample: bool = True) -> DeletionReque
             return request
     filename = "sample_deletion_requests.csv" if sample else "deletion_requests.csv"
     raise KeyError(f"case_id not found in {filename}: {case_id}")
+
+
+@lru_cache(maxsize=1)
+def load_user_identity_rows() -> tuple[dict[str, str], ...]:
+    """Load all rows from user_identities.csv (cached).
+
+    Returns:
+        Tuple of row dicts with keys ``user_id``, ``name``, ``email``,
+        ``phone``, ``email_hash``, ``updated_at``.
+    """
+    path = DATASET_DIR / "user_identities.csv"
+    with path.open(newline="", encoding="utf-8") as fh:
+        return tuple(csv.DictReader(fh))
+
+
+@lru_cache(maxsize=1)
+def load_user_audit_log() -> tuple[dict[str, str], ...]:
+    """Load all rows from user_audit_log.csv (cached).
+
+    Returns:
+        Tuple of row dicts with keys ``audit_id``, ``user_id``, ``event_time``,
+        ``field_name``, ``old_value``, ``new_value``.
+    """
+    path = DATASET_DIR / "user_audit_log.csv"
+    with path.open(newline="", encoding="utf-8") as fh:
+        return tuple(csv.DictReader(fh))

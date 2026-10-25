@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 # Allow `python code/main.py` without installing a package.
@@ -13,10 +14,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import evidence.mock_index  # noqa: F401
 import judge.mock_judge  # noqa: F401
 
-from evidence.base import get_evidence_index
-from identity import resolve_identity
+from emit import score_against_sample, validate_result, write_output_csv
+from evidence.base import EvidenceRecord, get_evidence_index
+from identity import expand_identifiers
 from judge.base import get_state_judge
 from loaders import DATASET_DIR, DeletionRequest, load_deletion_request, load_deletion_requests
+from policy import ResourceAssessment
+from resource_map import default_policy_action, system_id_for_resource
+from step_builder import build_case_result
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -58,59 +63,80 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _assessments_from_records(
+    records: list[EvidenceRecord],
+    *,
+    state_judge,
+) -> list[ResourceAssessment]:
+    """Group evidence by resource_id, judge each, and attach policy metadata."""
+    by_resource: dict[str, list[EvidenceRecord]] = defaultdict(list)
+    for record in records:
+        if not record.resource_id:
+            continue
+        by_resource[record.resource_id].append(record)
+
+    assessments: list[ResourceAssessment] = []
+    for resource_id, snippets in sorted(by_resource.items()):
+        try:
+            system_id = system_id_for_resource(resource_id)
+            policy_action = default_policy_action(resource_id)
+        except KeyError:
+            continue
+        judgment = state_judge.judge(
+            resource_id=resource_id,
+            policy_action=policy_action,
+            snippets=snippets,
+            activity_ctx={},
+        )
+        judgment.validate()
+        assessments.append(
+            ResourceAssessment(
+                resource_id=resource_id,
+                system_id=system_id,
+                policy_action=policy_action,
+                judgment=judgment,
+            )
+        )
+    return assessments
+
+
 def audit_case(
     request: DeletionRequest,
     *,
     evidence_index,
     state_judge,
+    authorizes_deletion: bool = True,
 ) -> dict[str, object]:
-    """Run the skeleton audit for one request (identity → index → judge).
-
-    Policy / step emit are not implemented yet; returns diagnostic fields only.
+    """Audit one request through identity → evidence → judge → steps.
 
     Args:
         request: Loaded deletion request for the case.
         evidence_index: Built Stage 6 plugin (``build`` already called).
         state_judge: Stage 7 plugin instance.
+        authorizes_deletion: False yields ``NOT_APPLICABLE`` (intent later).
 
     Returns:
-        Dict with ``case_id``, ``user_id``, ``evidence_hits``, judge fields, and
-        plugin names.
+        Dict with ``case_id``, ``deletion_status``, ``steps_json``, plus
+        diagnostic ``user_id`` / ``evidence_hits``.
 
     Raises:
         KeyError: If ``request.email`` cannot be resolved to an identity.
     """
-    identity = resolve_identity(request.email)
-    identifiers = {
-        identity.user_id,
-        identity.email.strip().lower(),
-        identity.phone,
-        identity.email_hash,
-        identity.name,
-    }
-    records = evidence_index.query(identifiers, request.audit_at)
-
-    # Stub resource loop: judge once with empty policy until spine lands.
-    judgment = state_judge.judge(
-        resource_id="",
-        policy_action="DELETE",
-        snippets=records,
-        activity_ctx={},
+    subject = expand_identifiers(request.email, audit_at=request.audit_at)
+    records = evidence_index.query(subject.as_match_set(), request.audit_at)
+    assessments = _assessments_from_records(records, state_judge=state_judge)
+    result = build_case_result(
+        request.case_id,
+        assessments,
+        authorizes_deletion=authorizes_deletion,
     )
-
-    return {
-        "case_id": request.case_id,
-        "user_id": identity.user_id,
-        "evidence_hits": len(records),
-        "judge_compliant": judgment.compliant,
-        "judge_confidence": judgment.confidence,
-        "plugin_evidence": evidence_index.name,
-        "plugin_judge": state_judge.name,
-    }
+    result["user_id"] = subject.user_id
+    result["evidence_hits"] = len(records)
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry: select plugins, audit one case or a batch.
+    """CLI entry: select plugins, audit one case or a batch, emit CSV.
 
     Args:
         argv: Optional CLI args (see ``parse_args``). Defaults to
@@ -141,15 +167,20 @@ def main(argv: list[str] | None = None) -> int:
         result = audit_case(
             request, evidence_index=evidence_index, state_judge=state_judge
         )
-        for key, value in result.items():
-            print(f"{key}: {value}")
+        errors = validate_result(result)
+        print(f"case_id:          {result['case_id']}")
+        print(f"user_id:          {result['user_id']}")
+        print(f"evidence_hits:    {result['evidence_hits']}")
+        print(f"deletion_status:  {result['deletion_status']}")
+        print(f"steps:            {len(result['steps_json'])}")
+        print(f"schema_errors:    {errors if errors else '[]'}")
         return 0
 
     sample = bool(args.sample)
     requests = load_deletion_requests(sample=sample)
     print(f"cases:            {len(requests)} ({'sample' if sample else 'full'})")
 
-    ok = 0
+    rows: list[dict[str, object]] = []
     skipped = 0
     for request in requests:
         try:
@@ -160,14 +191,24 @@ def main(argv: list[str] | None = None) -> int:
             skipped += 1
             print(f"{request.case_id}: SKIP identity ({exc})")
             continue
-        ok += 1
+        rows.append(result)
         print(
             f"{result['case_id']}: user={result['user_id']} "
-            f"hits={result['evidence_hits']} compliant={result['judge_compliant']}"
+            f"hits={result['evidence_hits']} status={result['deletion_status']} "
+            f"steps={len(result['steps_json'])}"
         )
 
-    print(f"summary: audited={ok} skipped_identity={skipped}")
-    print("note: Stage 6/7 mocks are stubs; spine/policy/emit land in next increments")
+    if rows:
+        path = write_output_csv(rows)
+        print(f"wrote:            {path} ({len(rows)} rows)")
+    if sample and rows:
+        metrics = score_against_sample(rows)
+        print(
+            f"sample_score:     status={metrics['status_correct']}/{metrics['n']} "
+            f"steps_exact={metrics['steps_exact']}/{metrics['n']}"
+        )
+    print(f"summary: audited={len(rows)} skipped_identity={skipped}")
+    print("note: Stage 6/7 mocks still return no real evidence; fill next increments")
     return 0
 
 
