@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import evidence.mock_index  # noqa: F401
 import judge.mock_judge  # noqa: F401
 
+from activity import resources_for_case
 from emit import score_against_sample, validate_result, write_output_csv
 from evidence.base import EvidenceRecord, get_evidence_index
 from identity import expand_identifiers
@@ -82,6 +83,11 @@ def _assessments_from_records(
             policy_action = default_policy_action(resource_id)
         except KeyError:
             continue
+        # Newest first, then stable-sort ABSENT proofs first for DELETE resources.
+        snippets.sort(key=lambda s: s.captured_at, reverse=True)
+        snippets.sort(
+            key=lambda s: 0 if (s.state == "ABSENT" and policy_action == "DELETE") else 1
+        )
         judgment = state_judge.judge(
             resource_id=resource_id,
             policy_action=policy_action,
@@ -123,7 +129,12 @@ def audit_case(
         KeyError: If ``request.email`` cannot be resolved to an identity.
     """
     subject = expand_identifiers(request.email, audit_at=request.audit_at)
-    records = evidence_index.query(subject.as_match_set(), request.audit_at)
+    linked_resources = resources_for_case(request, subject)
+    records = evidence_index.query(
+        subject.as_match_set(),
+        request.audit_at,
+        resource_ids=linked_resources,
+    )
     assessments = _assessments_from_records(records, state_judge=state_judge)
     result = build_case_result(
         request.case_id,
@@ -208,7 +219,7 @@ def main(argv: list[str] | None = None) -> int:
             f"steps_exact={metrics['steps_exact']}/{metrics['n']}"
         )
     print(f"summary: audited={len(rows)} skipped_identity={skipped}")
-    print("note: Stage 6/7 mocks still return no real evidence; fill next increments")
+    print("note: Stage 6 mock parses evidence; Stage 7 judge still stub (always compliant)")
     return 0
 
 

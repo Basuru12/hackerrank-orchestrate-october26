@@ -242,3 +242,88 @@ branch=main
 repo_root=D:\Projects\hackerrank-orchestrate-october26
 worktree=main
 parent_agent=none
+
+## [2026-10-25T09:27:07Z] One-hour plan increment 3: mock evidence index
+
+User Prompt (verbatim, secrets redacted):
+go for the next step of the plan
+
+Agent Response Summary:
+Filled Stage 6 mock index with deterministic JSON/SQL/log/TXT parsers, LINK_RESOURCE_IDENTITY enrichment, SQL ABSENT proofs, and case activity resource linking. Tightened matching (no display-name matches; deletion_worker ±2h around reported_at). case_01 now exact-matches sample (account_001 / evidence_54). Sample step_exact 2/32; status still capped by stub judge. Stopped for review before Stage 7 heuristics.
+
+Actions:
+* Added code/evidence/parsers.py, code/activity.py
+* Rewrote code/evidence/mock_index.py
+* Updated loaders.py, evidence/base.py, identity.py, main.py
+* Ran case_01 and --sample
+
+Context:
+tool=Cursor
+model=Composer
+branch=main
+repo_root=D:\Projects\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-25T09:45:17Z] DRY LINK_RESOURCE_IDENTITY regex
+
+User Prompt (verbatim, secrets redacted):
+cleanup
+
+Agent Response Summary:
+Centralized LINK_RESOURCE_IDENTITY parsing in activity.parse_link_details and removed the duplicate regex from evidence/mock_index.py. Verified parser and case_01 still resolve to account_001/evidence_54.
+
+Actions:
+* Updated code/activity.py
+* Updated code/evidence/mock_index.py
+* Ran smoke check
+
+Context:
+tool=Cursor
+model=Composer
+branch=main
+repo_root=D:\Projects\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-25T09:45:51Z] Extract link_parse module
+
+User Prompt (verbatim, secrets redacted):
+move it to a seperate module
+
+Agent Response Summary:
+Moved LINK_RESOURCE_IDENTITY parsing into code/link_parse.py. activity.py and evidence/mock_index.py now import parse_link_details from there. Verified case_01 still matches evidence_54.
+
+Actions:
+* Created code/link_parse.py
+* Updated code/activity.py and code/evidence/mock_index.py
+* Ran smoke check
+
+Context:
+tool=Cursor
+model=Composer
+branch=main
+repo_root=D:\Projects\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none
+
+## [2026-10-25T09:47:52Z] Move parse_ts into evidence.parsers
+
+User Prompt (verbatim, secrets redacted):
+@activity.py (11-13)  move this to the parsers modu;e
+
+Agent Response Summary:
+Moved ISO timestamp parsing to evidence.parsers.parse_ts and updated activity.py to import it. Verified case_01 still works.
+
+Actions:
+* Updated code/evidence/parsers.py
+* Updated code/activity.py
+* Ran smoke check
+
+Context:
+tool=Cursor
+model=Composer
+branch=main
+repo_root=D:\Projects\hackerrank-orchestrate-october26
+worktree=main
+parent_agent=none

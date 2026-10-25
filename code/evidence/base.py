@@ -45,7 +45,12 @@ class EvidenceIndex(Protocol):
                 ``evidence_files.csv`` and ``evidence/``).
         """
 
-    def query(self, identifiers: set[str], audit_at: str) -> list[EvidenceRecord]:
+    def query(
+        self,
+        identifiers: set[str],
+        audit_at: str,
+        resource_ids: set[str] | None = None,
+    ) -> list[EvidenceRecord]:
         """Return records attributable to ``identifiers`` at or before ``audit_at``.
 
         Args:
@@ -53,6 +58,8 @@ class EvidenceIndex(Protocol):
                 email hashes, name). Matching must be exact, not substring.
             audit_at: Case audit cutoff (ISO-8601). Only records with
                 ``captured_at <= audit_at`` may be returned.
+            resource_ids: Optional extra resource ids to include (e.g. from
+                deletion_worker activity for the case).
 
         Returns:
             Zero or more ``EvidenceRecord`` rows for this subject.

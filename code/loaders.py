@@ -115,3 +115,28 @@ def load_user_audit_log() -> tuple[dict[str, str], ...]:
     path = DATASET_DIR / "user_audit_log.csv"
     with path.open(newline="", encoding="utf-8") as fh:
         return tuple(csv.DictReader(fh))
+
+
+@lru_cache(maxsize=1)
+def load_evidence_manifest() -> tuple[dict[str, str], ...]:
+    """Load all rows from evidence_files.csv (cached).
+
+    Returns:
+        Tuple of row dicts with keys ``file_id``, ``file_path``, ``origin``,
+        ``captured_at``.
+    """
+    path = DATASET_DIR / "evidence_files.csv"
+    with path.open(newline="", encoding="utf-8") as fh:
+        return tuple(csv.DictReader(fh))
+
+
+@lru_cache(maxsize=1)
+def load_system_activity() -> tuple[dict[str, str], ...]:
+    """Load all rows from system_activity.csv (cached).
+
+    Returns:
+        Tuple of activity row dicts.
+    """
+    path = DATASET_DIR / "system_activity.csv"
+    with path.open(newline="", encoding="utf-8") as fh:
+        return tuple(csv.DictReader(fh))

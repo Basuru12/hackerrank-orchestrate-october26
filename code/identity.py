@@ -48,8 +48,12 @@ class SubjectIdentifiers:
     email_hashes: frozenset[str]
 
     def as_match_set(self) -> set[str]:
-        """Return the exact identifier set used for evidence matching."""
-        keys = {self.user_id, self.name, *self.emails, *self.phones, *self.email_hashes}
+        """Return exact identifiers for evidence matching (no display name).
+
+        Name is omitted to avoid colliding with unrelated people who share a
+        similar name string in evidence.
+        """
+        keys = {self.user_id, *self.emails, *self.phones, *self.email_hashes}
         return {k for k in keys if k}
 
 
