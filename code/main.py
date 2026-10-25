@@ -17,6 +17,7 @@ from evidence_sql import (
 )
 from identity import resolve_identity
 from loaders import load_deletion_request
+from output import complete_account_result, write_and_verify_sample
 
 # Tracer: case_01 account resource cited by sample_output / evidence_54 audit.
 TRACER_ACCOUNT_RESOURCE = {
@@ -96,6 +97,15 @@ def main(argv: list[str] | None = None) -> int:
     print(f"resource_id:      {resource_id}")
     print(f"profile_state:    {state}")
     print(f"profile_hits:     {hits if hits else '[]'}")
+
+    if state != "ABSENT":
+        print("tracer expected an absent account profile")
+        return 1
+
+    result = complete_account_result(request.case_id, resource_id, evidence_id)
+    write_and_verify_sample(result)
+    print("output_csv:       output.csv")
+    print("sample_match:     True")
     return 0
 
 
